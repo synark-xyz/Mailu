@@ -25,7 +25,7 @@ Work through these in order. Files referenced live in `deploy/`.
 - [ ] **1. Confirm the server can send mail.** You need a VPS or dedicated server with a public static IPv4, Debian/Ubuntu, 2 GB RAM or more, and root/SSH access. Ask your host: *"Is outbound port 25 open on this server?"* If not, request it be unblocked. Without it you can receive mail but not send.
 - [ ] **2. Note your server's public IPv4** (call it `SERVER_IP`).
 - [ ] **3. Open firewall ports** (host panel firewall and/or `ufw`): 25, 80, 110, 143, 443, 465, 587, 993, 995, 4190.
-- [ ] **4. Free those ports.** Stop or remove anything already using them (Apache, nginx, an existing Postfix or Exim). `install.sh` aborts if 25, 80, 443, 587 or 993 are taken.
+- [ ] **4. Free those ports.** Stop or remove anything already using them (Apache, nginx, an existing Postfix or Exim). `deploy.sh` aborts if 25, 80, 443, 587 or 993 are taken.
 
 ## B. DNS at your domain registrar or DNS host for getserviceflow.app
 
@@ -86,7 +86,7 @@ Add these now. The A record must resolve before install, or the Let's Encrypt ce
 | Certificate error or site won't load | `mail` A record not propagated yet, or port 80/443 blocked. Check `docker compose logs front`. |
 | Can receive but not send | Outbound port 25 blocked by host. |
 | Mail lands in spam | PTR not set, DKIM missing, or new IP reputation. Re-run step 17. |
-| `install.sh` says a port is in use | Another service is bound to it. Stop that service and re-run. |
+| `deploy.sh` says a port is in use | Another service is bound to it. Stop that service and re-run. |
 | Need logs | `cd /mailu && docker compose logs -f front smtp imap` |
 
 **Note:** the repo is at `synark-xyz/mailu` on branch `claude/gifted-sagan-mcbjao`. If it's private, clone with a token or deploy key, or copy `deploy/` to the server with `scp`.
