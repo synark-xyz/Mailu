@@ -10,7 +10,7 @@ Terms in Mailu: a **domain** is something you receive mail for (`getserviceflow.
 ## Part 1: Create accounts
 
 ### In the web UI
-1. Log in at `/admin` with `admin@getserviceflow.app` (the password was printed by `deploy.sh`; local copy in `deploy/.local/admin-credentials.txt`).
+1. Log in at `/admin` with `admin@getserviceflow.app` (the password is in `deploy/.local/admin-credentials.txt`; `deploy.sh` doesn't print it).
 2. Sidebar: **Mail domains** → on the `getserviceflow.app` row, click the **✉ envelope** icon (tooltip "Users") → **Add user**.
 3. Fill in: *Email* (`alice`), *Password*, *Quota* (e.g. 1 GB), leave *Enabled* on. **Save**.
 4. Repeat for `bob`.

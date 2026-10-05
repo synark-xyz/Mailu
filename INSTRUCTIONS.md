@@ -7,7 +7,7 @@ Needs OrbStack running (Docker + Compose). Ports 80, 443, 25, 587, 993 etc. must
 ```bash
 git clone -b claude/gifted-sagan-mcbjao https://github.com/synark-xyz/mailu.git
 cd mailu/deploy
-./deploy.sh --local                  # start; prints admin login
+./deploy.sh --local                  # start; admin login saved to deploy/.local/admin-credentials.txt
 ./deploy.sh --local -v --log run.log # verbose + log to file
 ./deploy.sh --local status | logs [svc] | down | pull
 ./deploy.sh --local reset -y         # wipe all local data
@@ -29,7 +29,7 @@ Work through these in order. Files referenced live in `deploy/`.
 
 ## B. DNS at your domain registrar or DNS host for getserviceflow.app
 
-Add these now. The A record must resolve before install, or the Let's Encrypt certificate will fail.
+Add these now. The A record must resolve before install: Traefik on your VPS requests the Let's Encrypt certificate for `mail.getserviceflow.app` when it first sees the host.
 
 | Type | Name | Value |
 |---|---|---|
@@ -52,8 +52,8 @@ Add these now. The A record must resolve before install, or the Let's Encrypt ce
   cd mailu/deploy
   sudo ./deploy.sh --prod
   ```
-- [ ] **9. Save the admin password** the script prints at the end. The login is `admin@getserviceflow.app`.
-- [ ] **10. Check it's healthy:** `cd /mailu && docker compose ps` shows all services `Up`. The first start can take 1 to 2 minutes while the certificate is issued.
+- [ ] **9. Read the admin password** from `/opt/mailu/admin-credentials.txt` (the script no longer prints it), change it after first login, then delete the file. The login is `admin@getserviceflow.app`.
+- [ ] **10. Check it's healthy:** `cd /opt/mailu && docker compose ps` shows all services `Up`. Until Traefik issues the real certificate, mail ports use a temporary self-signed one; check with `./deploy.sh --prod logs certs`.
 - [ ] **11. Open `https://mail.getserviceflow.app/admin`**, which should load over valid HTTPS. Log in and change the admin password.
 
 ## D. DKIM (required for deliverability)
@@ -75,7 +75,7 @@ Add these now. The A record must resolve before install, or the Let's Encrypt ce
 
 ## G. Afterwards
 
-- [ ] **20. Back up `/mailu`** on a schedule (at minimum `data`, `dkim`, `mail`, `mailu.env`).
+- [ ] **20. Back up `/opt/mailu`** on a schedule (at minimum `data`, `dkim`, `mail`, `mailu.env`).
 - [ ] **21. Once mail passes everywhere for a week**, you can tighten DMARC to `p=reject`.
 - [ ] **22. Mail clients** use IMAP `mail.getserviceflow.app:993` (SSL) and SMTP `:465` (SSL) or `:587` (STARTTLS). The username is the full address.
 
@@ -87,6 +87,6 @@ Add these now. The A record must resolve before install, or the Let's Encrypt ce
 | Can receive but not send | Outbound port 25 blocked by host. |
 | Mail lands in spam | PTR not set, DKIM missing, or new IP reputation. Re-run step 17. |
 | `deploy.sh` says a port is in use | Another service is bound to it. Stop that service and re-run. |
-| Need logs | `cd /mailu && docker compose logs -f front smtp imap` |
+| Need logs | `cd /opt/mailu && docker compose logs -f front smtp imap` |
 
 **Note:** the repo is at `synark-xyz/mailu` on branch `claude/gifted-sagan-mcbjao`. If it's private, clone with a token or deploy key, or copy `deploy/` to the server with `scp`.

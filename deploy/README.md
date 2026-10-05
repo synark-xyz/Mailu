@@ -8,7 +8,7 @@ Mail host: `mail.getserviceflow.app` · Webmail (Roundcube): `/webmail` · Admin
 - Ports 25, 80, 143, 443, 465, 587, 993, 995, 110, 4190 free and not firewalled.
 - Reverse DNS (PTR) for your IP set to `mail.getserviceflow.app` (set in your hosting panel).
 
-## 1. DNS (do this first so Let's Encrypt works)
+## 1. DNS (do this first so Traefik can get the certificate)
 Replace `SERVER_IP` with your server's IPv4.
 
 | Type | Name | Value |
@@ -27,7 +27,7 @@ Replace `SERVER_IP` with your server's IPv4.
 git clone <this repo> && cd Mailu/deploy
 sudo ./deploy.sh --prod   # or ./deploy.sh --local to test on your machine; see ./deploy.sh --help
 ```
-Everything lives in `/mailu` (config: `/mailu/mailu.env`, data: `/mailu/mail`). The script generates a random `SECRET_KEY` and admin password and prints the password at the end.
+Everything lives in `/opt/mailu` (config: `mailu.env`, data: `mail/`). The web UI is routed by the VPS's shared Traefik; the script generates a random `SECRET_KEY` and admin password and saves the password to `/opt/mailu/admin-credentials.txt`.
 
 ## 3. DKIM
 Log in at `https://mail.getserviceflow.app/admin` as `admin@getserviceflow.app` →
@@ -39,9 +39,9 @@ Admin UI → *Mail domains → getserviceflow.app → Users → Add user*. Clien
 
 ## Operations
 ```bash
-cd /mailu
+cd /opt/mailu
 docker compose ps
 docker compose logs -f front smtp
 docker compose pull && docker compose up -d     # update (same MAILU_VERSION)
 ```
-Back up `/mailu` (at minimum `data`, `dkim`, `mail`, `mailu.env`). Check deliverability at mail-tester.com.
+Back up `/opt/mailu` (at minimum `data`, `dkim`, `mail`, `mailu.env`). Check deliverability at mail-tester.com.
