@@ -11,7 +11,7 @@ Terms in Mailu: a **domain** is something you receive mail for (`getserviceflow.
 
 ### In the web UI
 1. Log in at `/admin` with `admin@getserviceflow.app` (the password was printed by `deploy.sh`; local copy in `deploy/.local/admin-credentials.txt`).
-2. Sidebar: **Mail domains** → click the **wrench/Manage users** icon next to `getserviceflow.app` → **Add user**.
+2. Sidebar: **Mail domains** → on the `getserviceflow.app` row, click the **✉ envelope** icon (tooltip "Users") → **Add user**.
 3. Fill in: *Email* (`alice`), *Password*, *Quota* (e.g. 1 GB), leave *Enabled* on. **Save**.
 4. Repeat for `bob`.
 
@@ -73,7 +73,7 @@ Clients may refuse plaintext passwords. If so, use webmail locally. In productio
 ## Part 3: "Sub-mail services": aliases, shared inboxes, extra domains
 
 ### 3.1 Alias: `support@` forwards to people (no extra mailbox)
-UI: **Mail domains** → manage **Aliases** on `getserviceflow.app` → **Add alias**: *Email* `support`, *Destination* `alice@getserviceflow.app, bob@getserviceflow.app`.
+UI: **Mail domains** → on the `getserviceflow.app` row click the **@** icon (tooltip "Aliases"; there is no text button) → **Add alias**: *Email* `support`, *Destination* `alice@getserviceflow.app, bob@getserviceflow.app`.
 CLI:
 ```bash
 ./deploy.sh --local cli alias support getserviceflow.app 'alice@getserviceflow.app,bob@getserviceflow.app'
@@ -105,7 +105,7 @@ For example `app.getserviceflow.app` or a second brand domain:
 1. UI: **Mail domains** → **New domain** → enter the name. Optionally set limits for users, aliases and quota. (CLI: `./deploy.sh --local cli domain app.getserviceflow.app`)
 2. Add users and aliases under that domain as above.
 3. Production: that domain needs its own DNS: MX `10 mail.getserviceflow.app.`, SPF `v=spf1 mx ~all`, DMARC, and its own **DKIM** key (domain's **Details/DNS** page shows the exact records).
-4. **Alternative domain** (same mailboxes answer at a second name, e.g. `alice@getserviceflow.com` also reaches `alice@getserviceflow.app`): on the domain's page choose **Alternatives** → add it, with the same DNS records.
+4. **Alternative domain** (same mailboxes answer at a second name, e.g. `alice@getserviceflow.com` also reaches `alice@getserviceflow.app`): on the domain's page choose the **✱ asterisk** icon ("Alternatives", global admin only) → add it, with the same DNS records.
 
 ### 3.6 Let your apps send mail (transactional, "sub-service" for software)
 Create a mailbox such as `noreply@getserviceflow.app` and use it as SMTP credentials in your application:
