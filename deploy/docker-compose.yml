@@ -1,0 +1,99 @@
+# Mailu stack for getserviceflow.app (Mailu 2024.06, TLS via Let's Encrypt)
+services:
+  redis:
+    image: redis:alpine
+    restart: always
+    volumes:
+      - "${ROOT:-/mailu}/redis:/data"
+
+  front:
+    image: ghcr.io/mailu/nginx:${MAILU_VERSION:-2024.06}
+    restart: always
+    env_file: mailu.env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "110:110"
+      - "995:995"
+      - "143:143"
+      - "993:993"
+      - "4190:4190"
+    networks: [default, webmail]
+    volumes:
+      - "${ROOT:-/mailu}/certs:/certs"
+      - "${ROOT:-/mailu}/overrides/nginx:/overrides:ro"
+    depends_on: [resolver]
+    dns: [192.168.203.254]
+
+  resolver:
+    image: ghcr.io/mailu/unbound:${MAILU_VERSION:-2024.06}
+    env_file: mailu.env
+    restart: always
+    networks:
+      default:
+        ipv4_address: 192.168.203.254
+
+  admin:
+    image: ghcr.io/mailu/admin:${MAILU_VERSION:-2024.06}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - "${ROOT:-/mailu}/data:/data"
+      - "${ROOT:-/mailu}/dkim:/dkim"
+    depends_on: [redis, resolver]
+    dns: [192.168.203.254]
+
+  imap:
+    image: ghcr.io/mailu/dovecot:${MAILU_VERSION:-2024.06}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - "${ROOT:-/mailu}/mail:/mail"
+      - "${ROOT:-/mailu}/overrides/dovecot:/overrides:ro"
+    depends_on: [front, resolver]
+    dns: [192.168.203.254]
+
+  smtp:
+    image: ghcr.io/mailu/postfix:${MAILU_VERSION:-2024.06}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - "${ROOT:-/mailu}/mailqueue:/queue"
+      - "${ROOT:-/mailu}/overrides/postfix:/overrides:ro"
+    depends_on: [front, resolver]
+    dns: [192.168.203.254]
+
+  antispam:
+    image: ghcr.io/mailu/rspamd:${MAILU_VERSION:-2024.06}
+    hostname: antispam
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - "${ROOT:-/mailu}/filter:/var/lib/rspamd"
+      - "${ROOT:-/mailu}/overrides/rspamd:/overrides:ro"
+    depends_on: [front, redis, resolver]
+    dns: [192.168.203.254]
+
+  webmail:
+    image: ghcr.io/mailu/webmail:${MAILU_VERSION:-2024.06}
+    restart: always
+    env_file: mailu.env
+    volumes:
+      - "${ROOT:-/mailu}/webmail:/data"
+      - "${ROOT:-/mailu}/overrides/roundcube:/overrides:ro"
+    networks: [webmail]
+    depends_on: [front]
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 192.168.203.0/24
+  webmail:
+    driver: bridge
