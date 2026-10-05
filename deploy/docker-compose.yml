@@ -11,17 +11,17 @@ services:
     restart: always
     env_file: mailu.env
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-      - "25:25"
-      - "465:465"
-      - "587:587"
-      - "110:110"
-      - "995:995"
-      - "143:143"
-      - "993:993"
-      - "4190:4190"
+      - "${PORT_HTTP:-80}:80"
+      - "${PORT_HTTPS:-443}:443"
+      - "${PORT_HTTPS:-443}:443/udp"
+      - "${PORT_SMTP:-25}:25"
+      - "${PORT_SMTPS:-465}:465"
+      - "${PORT_SUBMISSION:-587}:587"
+      - "${PORT_POP3:-110}:110"
+      - "${PORT_POP3S:-995}:995"
+      - "${PORT_IMAP:-143}:143"
+      - "${PORT_IMAPS:-993}:993"
+      - "${PORT_SIEVE:-4190}:4190"
     networks: [default, webmail]
     volumes:
       - "${ROOT:-/mailu}/certs:/certs"

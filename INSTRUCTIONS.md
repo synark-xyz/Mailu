@@ -1,5 +1,23 @@
 # Go-live checklist: mail.getserviceflow.app
 
+## Step 0: Try it locally first (OrbStack)
+
+Needs OrbStack running (Docker + Compose). Ports 80, 443, 25, 587, 993 etc. must be free on your Mac.
+
+```bash
+git clone -b claude/gifted-sagan-mcbjao https://github.com/synark-xyz/mailu.git
+cd mailu/deploy
+./deploy.sh --local                  # start; prints admin login
+./deploy.sh --local -v --log run.log # verbose + log to file
+./deploy.sh --local status | logs [svc] | down | pull
+./deploy.sh --local reset -y         # wipe all local data
+```
+Then open http://localhost/admin and http://localhost/webmail. Create two users and send mail between them.
+Local limits: plain HTTP, and no real internet mail (no public DNS, MX or PTR). That is expected.
+If a port is taken, add e.g. `PORT_HTTP=8080` to `deploy/.local/.env` and re-run.
+
+Go to the production steps below once the local run works.
+
 Work through these in order. Files referenced live in `deploy/`.
 
 ## A. Before you touch the server (about 15 min)
@@ -32,7 +50,7 @@ Add these now. The A record must resolve before install, or the Let's Encrypt ce
   ```bash
   git clone -b claude/gifted-sagan-mcbjao https://github.com/synark-xyz/mailu.git
   cd mailu/deploy
-  sudo ./install.sh
+  sudo ./deploy.sh --prod
   ```
 - [ ] **9. Save the admin password** the script prints at the end. The login is `admin@getserviceflow.app`.
 - [ ] **10. Check it's healthy:** `cd /mailu && docker compose ps` shows all services `Up`. The first start can take 1 to 2 minutes while the certificate is issued.

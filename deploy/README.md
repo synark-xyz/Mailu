@@ -25,7 +25,7 @@ Replace `SERVER_IP` with your server's IPv4.
 ## 2. Install
 ```bash
 git clone <this repo> && cd Mailu/deploy
-sudo ./install.sh
+sudo ./deploy.sh --prod   # or ./deploy.sh --local to test on your machine; see ./deploy.sh --help
 ```
 Everything lives in `/mailu` (config: `/mailu/mailu.env`, data: `/mailu/mail`). The script generates a random `SECRET_KEY` and admin password and prints the password at the end.
 
