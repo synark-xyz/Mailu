@@ -24,3 +24,4 @@ qemu-arm-static
 .mcp.json
 .memory/
 .claude_code_search/
+.DS_Store

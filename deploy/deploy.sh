@@ -72,7 +72,8 @@ warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 if [ "$MODE" = prod ]; then
-  ROOT=${ROOT:-/mailu}; HOST=mail.$DOMAIN; TLS=letsencrypt; SCHEME=https
+  # Web UI goes through the VPS's Traefik (TLS_FLAVOR=mail: HTTP behind proxy, certs only for mail ports)
+  ROOT=${ROOT:-/opt/mailu}; HOST=mail.$DOMAIN; TLS=mail; SCHEME=https
   [ "$(id -u)" = 0 ] || die "--prod must run as root"
 else
   ROOT=${ROOT:-$HERE/.local}; HOST=localhost; TLS=notls; SCHEME=http
@@ -98,20 +99,23 @@ port_in_use() {
 
 check_ports() {
   local busy=() p
+  # Ports held by our own running stack are fine
+  "${COMPOSE[@]}" ps --status running -q front 2>/dev/null | grep -q . && return 0
   for p in "${PORTS[@]}"; do port_in_use "$p" && busy+=("$p"); done
-  if [ ${#busy[@]} -gt 0 ]; then
-    # Ignore ports held by our own running stack
-    if "${COMPOSE[@]}" ps -q front 2>/dev/null | grep -q .; then return 0; fi
-    die "Ports in use: ${busy[*]}. Stop whatever holds them (for --local, set PORT_HTTP, PORT_SMTP, ... in $ROOT/.env)."
-  fi
+  [ ${#busy[@]} -eq 0 ] || die "Ports in use: ${busy[*]}. Stop whatever holds them (set PORT_HTTP, PORT_SMTP, ... in $ROOT/.env)."
 }
 
 write_config() {
   mkdir -p "$ROOT"/{certs,data,dkim,mail,mailqueue,filter,redis,webmail,overrides}
   cp "$HERE/docker-compose.yml" "$ROOT/docker-compose.yml"
-  if [ ! -f "$ROOT/.env" ]; then echo "ROOT=$ROOT" > "$ROOT/.env"; fi
+  if [ ! -f "$ROOT/.env" ]; then
+    echo "ROOT=$ROOT" > "$ROOT/.env"
+    # Traefik owns 80/443 on the VPS: keep Mailu's web ports on loopback and enable the cert-copy service
+    [ "$MODE" = prod ] && printf '%s\n' "MAIL_HOST=$HOST" BIND_WEB=127.0.0.1 PORT_HTTP=8080 PORT_HTTPS=8443 COMPOSE_PROFILES=traefik >> "$ROOT/.env"
+  fi
   if [ ! -f "$ROOT/mailu.env" ]; then
     log "Generating $ROOT/mailu.env"
+    { set +x; } 2>/dev/null   # keep SECRET_KEY out of -v traces
     sed -e "s/__SECRET_KEY__/$(openssl rand -hex 16 | tr a-f A-F)/" \
         -e "s/^DOMAIN=.*/DOMAIN=$DOMAIN/" \
         -e "s/^HOSTNAMES=.*/HOSTNAMES=$HOST/" \
@@ -119,9 +123,14 @@ write_config() {
         -e "s#^WEBSITE=.*#WEBSITE=https://$DOMAIN#" \
         "$HERE/mailu.env.template" > "$ROOT/mailu.env"
     chmod 600 "$ROOT/mailu.env"
+    # Behind Traefik (host network): it reaches 'front' from the bridge gateway
+    [ "$MODE" = prod ] && sed -i.bak -e 's#^REAL_IP_HEADER=.*#REAL_IP_HEADER=X-Forwarded-For#' \
+      -e 's#^REAL_IP_FROM=.*#REAL_IP_FROM=192.168.203.1#' "$ROOT/mailu.env" && rm -f "$ROOT/mailu.env.bak"
+    [ "$VERBOSE" = 1 ] && set -x
   else
     log "Keeping existing $ROOT/mailu.env"
   fi
+  return 0
 }
 
 # Host ports published by 'front' (honours PORT_* overrides from env or $ROOT/.env)
@@ -133,6 +142,7 @@ load_ports() {
 }
 
 create_admin() {
+  { set +x; } 2>/dev/null   # keep the password out of -v traces
   local pw=${ADMIN_PASSWORD:-$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)} ok=0 i
   log "Waiting for admin service (first start can take a minute or two)"
   for i in $(seq 1 60); do
@@ -140,12 +150,12 @@ create_admin() {
     sleep 5
   done
   [ $ok = 1 ] || die "Admin service never became ready. Run: $0 --$MODE logs admin"
+  # Never print the password: it would end up in --log files
+  ( umask 077; echo "admin@$DOMAIN $pw" > "$ROOT/admin-credentials.txt" )
   echo "  Admin login: admin@$DOMAIN"
-  echo "  Password:    $pw"
-  if [ "$MODE" = local ]; then
-    ( umask 077; echo "admin@$DOMAIN $pw" > "$ROOT/admin-credentials.txt" )
-    echo "  (saved to $ROOT/admin-credentials.txt)"
-  fi
+  echo "  Password saved to $ROOT/admin-credentials.txt (chmod 600) - read it, change it, delete the file."
+  [ "$VERBOSE" = 1 ] && set -x
+  return 0
 }
 
 summary() {
@@ -167,7 +177,13 @@ Local testing notes:
   * Stop: $0 --local down    Wipe: $0 --local reset
 MSG
   else
-    echo "Next: add DNS records (see ../INSTRUCTIONS.md): MX, SPF, DKIM (admin UI -> Mail domains -> Details), DMARC, PTR."
+    cat <<MSG
+
+Next:
+  * Web UI is served by Traefik at $base (needs an A record for $HOST). Until Traefik issues the cert, mail ports use a self-signed one.
+  * Check the real cert arrived: $0 --prod logs certs   (then restart front if it was not picked up)
+  * DNS: MX, SPF, DKIM (admin UI -> Mail domains -> Details), DMARC, PTR.
+MSG
   fi
 }
 

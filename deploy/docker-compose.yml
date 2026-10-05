@@ -1,7 +1,10 @@
-# Mailu stack for getserviceflow.app (Mailu 2024.06, TLS via Let's Encrypt)
+# Mailu stack for getserviceflow.app (Mailu 2024.06)
+# --prod: web UI is routed by the VPS's shared Traefik (labels on 'front'); mail ports are published directly.
+# Traefik's cert for the mail host is copied to /certs by the 'certs' service (profile "traefik").
+name: mailu
 services:
   redis:
-    image: redis:alpine
+    image: redis:7-alpine
     restart: always
     volumes:
       - "${ROOT:-/mailu}/redis:/data"
@@ -9,11 +12,10 @@ services:
   front:
     image: ghcr.io/mailu/nginx:${MAILU_VERSION:-2024.06}
     restart: always
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     ports:
-      - "${PORT_HTTP:-80}:80"
-      - "${PORT_HTTPS:-443}:443"
-      - "${PORT_HTTPS:-443}:443/udp"
+      - "${BIND_WEB:-0.0.0.0}:${PORT_HTTP:-80}:80"
+      - "${BIND_WEB:-0.0.0.0}:${PORT_HTTPS:-443}:443"
       - "${PORT_SMTP:-25}:25"
       - "${PORT_SMTPS:-465}:465"
       - "${PORT_SUBMISSION:-587}:587"
@@ -23,15 +25,58 @@ services:
       - "${PORT_IMAPS:-993}:993"
       - "${PORT_SIEVE:-4190}:4190"
     networks: [default, webmail]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=mailu_default
+      - traefik.http.routers.mailu.rule=Host(`${MAIL_HOST:-localhost}`)
+      - traefik.http.routers.mailu.entrypoints=websecure
+      - traefik.http.routers.mailu.tls.certresolver=letsencrypt
+      - traefik.http.services.mailu.loadbalancer.server.port=80
     volumes:
       - "${ROOT:-/mailu}/certs:/certs"
       - "${ROOT:-/mailu}/overrides/nginx:/overrides:ro"
-    depends_on: [resolver]
+    depends_on:
+      resolver:
+        condition: service_started
+      certinit:
+        condition: service_completed_successfully
+        required: false
     dns: [192.168.203.254]
+
+  # Temporary self-signed cert so 'front' can start (and Traefik can see it) before the real one exists
+  certinit:
+    profiles: [traefik]
+    image: alpine:3.20
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        [ -f /certs/cert.pem ] || { apk add --no-cache openssl >/dev/null &&
+        openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=${MAIL_HOST}"
+        -keyout /certs/key.pem -out /certs/cert.pem && chmod 600 /certs/key.pem; }
+    volumes:
+      - "${ROOT:-/mailu}/certs:/certs"
+
+  # Copies the mail host's cert from Traefik's acme.json to /certs (front reloads on change)
+  certs:
+    profiles: [traefik]
+    image: ldez/traefik-certs-dumper:v2.8.3
+    restart: always
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        printf '%s\n' '#!/bin/sh' 'cp /out/${MAIL_HOST}/cert.pem /certs/cert.pem'
+        'cp /out/${MAIL_HOST}/key.pem /certs/key.pem' 'chmod 600 /certs/key.pem' > /hook.sh &&
+        chmod +x /hook.sh &&
+        exec traefik-certs-dumper file --version v2 --watch --source /acme/acme.json --dest /out
+        --domain-subdir --crt-name cert --crt-ext .pem --key-name key --key-ext .pem --post-hook /hook.sh
+    volumes:
+      - traefik-letsencrypt:/acme:ro
+      - "${ROOT:-/mailu}/certs:/certs"
 
   resolver:
     image: ghcr.io/mailu/unbound:${MAILU_VERSION:-2024.06}
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     restart: always
     networks:
       default:
@@ -40,7 +85,7 @@ services:
   admin:
     image: ghcr.io/mailu/admin:${MAILU_VERSION:-2024.06}
     restart: always
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     volumes:
       - "${ROOT:-/mailu}/data:/data"
       - "${ROOT:-/mailu}/dkim:/dkim"
@@ -50,7 +95,7 @@ services:
   imap:
     image: ghcr.io/mailu/dovecot:${MAILU_VERSION:-2024.06}
     restart: always
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     volumes:
       - "${ROOT:-/mailu}/mail:/mail"
       - "${ROOT:-/mailu}/overrides/dovecot:/overrides:ro"
@@ -60,7 +105,7 @@ services:
   smtp:
     image: ghcr.io/mailu/postfix:${MAILU_VERSION:-2024.06}
     restart: always
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     volumes:
       - "${ROOT:-/mailu}/mailqueue:/queue"
       - "${ROOT:-/mailu}/overrides/postfix:/overrides:ro"
@@ -71,7 +116,7 @@ services:
     image: ghcr.io/mailu/rspamd:${MAILU_VERSION:-2024.06}
     hostname: antispam
     restart: always
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     volumes:
       - "${ROOT:-/mailu}/filter:/var/lib/rspamd"
       - "${ROOT:-/mailu}/overrides/rspamd:/overrides:ro"
@@ -81,12 +126,17 @@ services:
   webmail:
     image: ghcr.io/mailu/webmail:${MAILU_VERSION:-2024.06}
     restart: always
-    env_file: mailu.env
+    env_file: ${MAILU_ENV_FILE:-mailu.env}
     volumes:
       - "${ROOT:-/mailu}/webmail:/data"
       - "${ROOT:-/mailu}/overrides/roundcube:/overrides:ro"
     networks: [webmail]
     depends_on: [front]
+
+volumes:
+  traefik-letsencrypt:  # created by the VPS's Traefik project; only used with the "traefik" profile
+    external: true
+    name: traefik_traefik-letsencrypt
 
 networks:
   default:
