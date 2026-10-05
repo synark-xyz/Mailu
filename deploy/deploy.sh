@@ -4,7 +4,7 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 DOMAIN=${DOMAIN:-getserviceflow.app}
-MODE="" ; CMD=up ; VERBOSE=0 ; LOGFILE="" ; ASSUME_YES=0 ; ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+MODE="" ; CMD=up ; VERBOSE=0 ; LOGFILE="" ; ASSUME_YES=0 ; TZ_VALUE=${TZ_VALUE:-} ; ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
 SERVICE_ARGS=() ; CMD_SET=0
 
 usage() {
@@ -20,6 +20,7 @@ Options:
   -v, --verbose      Verbose output (bash trace + docker compose --verbose)
   --log FILE         Also write all output to FILE
   --domain NAME      Mail domain (default: $DOMAIN); mail host is mail.NAME in --prod, localhost in --local
+  --tz ZONE          Timezone, e.g. Asia/Kolkata (default: auto-detected from this machine, else UTC)
   --password PASS    Admin password (default: random, printed once)
   -y, --yes          Don't ask for confirmation (for 'reset')
   -h, --help         Show this help
@@ -49,6 +50,7 @@ while [ $# -gt 0 ]; do
     -v|--verbose) VERBOSE=1 ;;
     --log) [ $# -ge 2 ] || { echo "--log needs a file"; exit 2; }; LOGFILE=$2; shift ;;
     --domain) [ $# -ge 2 ] || { echo "--domain needs a value"; exit 2; }; DOMAIN=$2; shift ;;
+    --tz) [ $# -ge 2 ] || { echo "--tz needs a value"; exit 2; }; TZ_VALUE=$2; shift ;;
     --password) [ $# -ge 2 ] || { echo "--password needs a value"; exit 2; }; ADMIN_PASSWORD=$2; shift ;;
     -y|--yes) ASSUME_YES=1 ;;
     -h|--help) usage; exit 0 ;;
@@ -81,6 +83,14 @@ fi
 
 COMPOSE=(docker compose --project-directory "$ROOT")
 [ "$VERBOSE" = 1 ] && COMPOSE+=(--verbose)
+
+detect_tz() {
+  local z=""
+  if [ -L /etc/localtime ]; then z=$(readlink /etc/localtime | sed 's#.*/zoneinfo/##')
+  elif command -v timedatectl >/dev/null; then z=$(timedatectl show -p Timezone --value 2>/dev/null || true)
+  elif [ -f /etc/timezone ]; then z=$(cat /etc/timezone); fi
+  case $z in */*|UTC|Etc/*) echo "$z" ;; *) echo "Etc/UTC" ;; esac
+}
 
 ensure_docker() {
   if ! command -v docker >/dev/null; then
@@ -120,6 +130,7 @@ write_config() {
         -e "s/^DOMAIN=.*/DOMAIN=$DOMAIN/" \
         -e "s/^HOSTNAMES=.*/HOSTNAMES=$HOST/" \
         -e "s/^TLS_FLAVOR=.*/TLS_FLAVOR=$TLS/" \
+        -e "s#^TZ=.*#TZ=${TZ_VALUE:-$(detect_tz)}#" \
         -e "s#^WEBSITE=.*#WEBSITE=https://$DOMAIN#" \
         "$HERE/mailu.env.template" > "$ROOT/mailu.env"
     chmod 600 "$ROOT/mailu.env"
@@ -128,7 +139,7 @@ write_config() {
       -e 's#^REAL_IP_FROM=.*#REAL_IP_FROM=192.168.203.1#' "$ROOT/mailu.env" && rm -f "$ROOT/mailu.env.bak"
     [ "$VERBOSE" = 1 ] && set -x
   else
-    log "Keeping existing $ROOT/mailu.env"
+    log "Keeping existing $ROOT/mailu.env (timezone: $(grep '^TZ=' "$ROOT/mailu.env" | cut -d= -f2); edit TZ there to change)"
   fi
   return 0
 }
