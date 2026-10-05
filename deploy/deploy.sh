@@ -30,6 +30,7 @@ Commands (default: up):
   status    Show container state
   logs      Follow logs (optionally name services: front smtp imap admin ...)
   pull      Pull newer images and restart
+  cli ARGS  Run "flask mailu ARGS" in the admin container (user, alias, domain, ...). Put options before "cli".
   reset     --local only: stop and DELETE all local data
 
 Examples:
@@ -41,6 +42,7 @@ USAGE
 }
 
 while [ $# -gt 0 ]; do
+  if [ "$CMD" = cli ] && [ "$CMD_SET" = 1 ]; then SERVICE_ARGS+=("$1"); shift; continue; fi
   case $1 in
     --local) MODE=local ;;
     --prod) MODE=prod ;;
@@ -50,7 +52,7 @@ while [ $# -gt 0 ]; do
     --password) [ $# -ge 2 ] || { echo "--password needs a value"; exit 2; }; ADMIN_PASSWORD=$2; shift ;;
     -y|--yes) ASSUME_YES=1 ;;
     -h|--help) usage; exit 0 ;;
-    up|down|status|logs|pull|reset) if [ "$CMD_SET" = 0 ]; then CMD=$1; CMD_SET=1; else SERVICE_ARGS+=("$1"); fi ;;
+    up|down|status|logs|pull|reset|cli) if [ "$CMD_SET" = 0 ]; then CMD=$1; CMD_SET=1; else SERVICE_ARGS+=("$1"); fi ;;
     -*) echo "Unknown option: $1"; usage; exit 2 ;;
     *) if [ "$CMD_SET" = 1 ]; then SERVICE_ARGS+=("$1"); else echo "Unknown command: $1"; usage; exit 2; fi ;;
   esac
@@ -179,6 +181,7 @@ case $CMD in
   down)   "${COMPOSE[@]}" down ;;
   status) "${COMPOSE[@]}" ps ;;
   logs)   "${COMPOSE[@]}" logs -f --tail=100 ${SERVICE_ARGS[@]+"${SERVICE_ARGS[@]}"} ;;
+  cli)    "${COMPOSE[@]}" exec -T admin flask mailu ${SERVICE_ARGS[@]+"${SERVICE_ARGS[@]}"} ;;
   pull)   "${COMPOSE[@]}" pull && "${COMPOSE[@]}" up -d ;;
   reset)
     [ "$MODE" = local ] || die "reset is only allowed with --local"
